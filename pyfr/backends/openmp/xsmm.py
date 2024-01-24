@@ -1,4 +1,4 @@
-from ctypes import byref, cast, c_int, c_double, c_float, c_ulonglong, c_void_p
+from ctypes import byref, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
@@ -15,10 +15,9 @@ class XSMMWrappers(LibWrapper):
         (None, 'libxsmm_init'),
         (None, 'libxsmm_finalize'),
         (c_void_p, 'libxsmm_fsspmdm_create', c_int, c_int, c_int, c_int, c_int,
-         c_int, c_int, c_void_p, c_void_p, c_void_p, c_int, c_void_p),
+         c_int, c_int, c_void_p, c_void_p, c_int, c_void_p),
         (None, 'libxsmm_fsspmdm_execute', c_void_p, c_void_p, c_void_p),
-        (None, 'libxsmm_fsspmdm_destroy', c_void_p),
-        (c_ulonglong, 'libxsmm_timer_tick')
+        (None, 'libxsmm_fsspmdm_destroy', c_void_p)
     ]
 
 
@@ -60,10 +59,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check that beta is zero or one
         if beta != 0.0 and beta != 1.0:
-            raise NotSuitableError('libxsmm requires β = 0 or β = 1')
-
-        # Index type
-        ixdtype = self.backend.ixdtype
+            raise NotSuitableError('libxssm requires β = 0 or β = 1')
 
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
@@ -89,15 +85,13 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
                 xsmm_dtype = 1
                 alpha, beta = c_float(alpha), c_float(beta)
 
-            timer_tick = cast(self._wrappers.libxsmm_timer_tick, c_void_p)
-
             # JIT and register an block leaddim size kernel for this matrix
             blkptr = self._wrappers.libxsmm_fsspmdm_create(
                 xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
-                byref(beta), a_np.ctypes.data, c_is_nt, timer_tick
+                byref(beta), c_is_nt, a_np.ctypes.data
             )
             if not blkptr:
-                raise NotSuitableError('libxsmm unable to JIT a kernel')
+                raise NotSuitableError('libxssm unable to JIT a kernel')
 
             # Update the cache
             self._kerns[ckey] = blkptr
@@ -106,10 +100,8 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src,
-                                        [np.uintp]*2 + [np.uintp, ixdtype]*2)
-        batch_gemm.set_args(self._exec_ptr, blkptr, b, b.blocksz, out,
-                            out.blocksz)
-        batch_gemm.set_nblocks(b.nblocks)
+        batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
+        batch_gemm.set_args(self._exec_ptr, blkptr, b.nblocks, b, b.blocksz,
+                            out, out.blocksz)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)

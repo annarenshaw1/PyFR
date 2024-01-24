@@ -91,7 +91,7 @@ class MetalKernelProvider(BaseKernelProvider):
         # Classify the arguments as either pointers or scalars
         pargs, sargs = [], []
         for i, argt in enumerate(argtypes):
-            if argt == np.uintp:
+            if argt == np.intp:
                 pargs.append(i)
             else:
                 ctype = npdtype_to_ctypestype(argt)
@@ -131,7 +131,7 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
+    def _instantiate_kernel(self, dims, fun, arglst, argmv):
         kargs, rtargs = [], []
 
         # Determine the thread group and grid sizes
@@ -162,4 +162,4 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             def run(self, cbuf):
                 fun(cbuf, grid, tgrp, *kargs)
 
-        return PointwiseKernel(argm, argv)
+        return PointwiseKernel(*argmv)

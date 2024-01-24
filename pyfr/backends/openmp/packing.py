@@ -1,13 +1,9 @@
-import numpy as np
-
 from pyfr.backends.base import NullKernel
 from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 
 
 class OpenMPPackingKernels(OpenMPKernelProvider):
     def pack(self, mv):
-        ixdtype = self.backend.ixdtype
-
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
 
@@ -16,7 +12,7 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
                                                               ncv=v.nvcol)
 
         # Build
-        kern = self._build_kernel('pack_view', src, [ixdtype] + [np.uintp]*4)
+        kern = self._build_kernel('pack_view', src, 'iPPPP')
         kern.set_args(v.n, v.basedata, v.mapping, v.rstrides or 0, m)
 
         return OpenMPKernel(mats=[mv], kernel=kern)

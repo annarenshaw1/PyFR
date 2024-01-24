@@ -21,7 +21,8 @@ class BaseStdController(BaseStdIntegrator):
 
         # Fire off any event handlers if not restarting
         if not self.isrestart:
-            self._run_plugins()
+            for csh in self.completed_step_handlers:
+                csh(self)
 
     def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
@@ -35,10 +36,18 @@ class BaseStdController(BaseStdIntegrator):
         if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
-        self._invalidate_caches()
+        # Invalidate the solution cache
+        self._curr_soln = None
 
-        # Run any plugins
-        self._run_plugins()
+        # Invalidate the solution gradients cache
+        self._curr_grad_soln = None
+
+        # Fire off any event handlers
+        for csh in self.completed_step_handlers:
+            csh(self)
+
+        # Abort if plugins request it
+        self._check_abort()
 
         # Clear the step info
         self.stepinfo = []
@@ -92,12 +101,6 @@ class StdPIController(BaseStdController):
         # Error tolerances
         self._atol = self.cfg.getfloat(sect, 'atol')
         self._rtol = self.cfg.getfloat(sect, 'rtol')
-
-        if self._atol < 10*self.backend.fpdtype_eps:
-            raise ValueError('Absolute tolerance too small')
-
-        if self._rtol < 10*self.backend.fpdtype_eps:
-            raise ValueError('Relative tolerance too small')
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')

@@ -1,14 +1,13 @@
 from collections import defaultdict
 from itertools import chain
-from uuid import UUID
+import uuid
 
 import numpy as np
 
 from pyfr.nputil import fuzzysort
 from pyfr.polys import get_polybasis
-from pyfr.progress import NullProgressSpinner
 from pyfr.shapes import BaseShape
-from pyfr.util import digest, subclass_where
+from pyfr.util import subclass_where
 
 
 class BaseReader:
@@ -22,7 +21,7 @@ class BaseReader:
         mesh = self._to_raw_pyfrm(lintol)
 
         # Add metadata
-        mesh['mesh_uuid'] = np.array(str(UUID(digest(mesh)[:32])), dtype='S')
+        mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
 
         return mesh
 
@@ -143,6 +142,14 @@ class NodalMeshAssembler:
                 lfpts = self._nodepts[lfnodes]
                 rfpts = self._nodepts[rfnodes]
 
+                # Convert to polar/cylindrical coordinates for pairing               
+                lfpts[..., 0] = np.sqrt(lfpts[..., 0]**2 + lfpts[..., 1]**2)
+                rfpts[..., 0] = np.sqrt(rfpts[..., 0]**2 + rfpts[..., 1]**2)
+
+                # Assign arbitrary 0/1 to theta value
+                rfpts[..., 1] = np.ones_like(rfpts[..., 1])
+                lfpts[..., 1] = np.zeros_like(lfpts[..., 1])
+
                 lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
@@ -167,30 +174,24 @@ class NodalMeshAssembler:
 
         return bfaces
 
-    def get_connectivity(self, spinner=NullProgressSpinner()):
+    def get_connectivity(self):
         # For connectivity a first-order representation is sufficient
         eles = self._to_first_order(self._elenodes)
-        spinner()
 
         # Split into fluid and boundary parts
         fpart, bpart = self._split_fluid(eles)
-        spinner()
 
         # Extract the faces of the fluid elements
         ffaces = self._extract_faces(fpart)
-        spinner()
 
         # Pair the fluid-fluid faces
         fpairs, resid = self._pair_fluid_faces(ffaces)
-        spinner()
 
         # Tag and pair periodic boundary faces
         pfpairs, pmap = self._pair_periodic_fluid_faces(bpart, resid)
-        spinner()
 
         # Identify the fixed boundary faces
         bf = self._ident_boundary_faces(bpart, resid)
-        spinner()
 
         if any(resid.values()):
             raise ValueError('Unpaired faces in mesh')
@@ -213,20 +214,18 @@ class NodalMeshAssembler:
         for pbcrgn, pent in self._bfacespents.items():
             bcon[pbcrgn] = bf[pent]
 
-        spinner()
-
         # Output
-        ret = {'con_p0': np.array(con, dtype='S4,i8,i1,i2').T}
+        ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
 
         for k, v in con_pnames.items():
-            ret['con_p0', f'periodic_{k}'] = np.array(v, dtype=np.int64)
+            ret['con_p0', f'periodic_{k}'] = np.array(v, dtype=np.int32)
 
         for k, v in bcon.items():
-            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i8,i1,i2')
+            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')
 
         return ret
 
-    def _linearise_eles(self, lintol, spinner):
+    def _linearise_eles(self, lintol):
         lidx = {}
 
         for etype, pent in self._elenodes:
@@ -267,15 +266,13 @@ class NodalMeshAssembler:
             for ix in np.nonzero(lin)[0]:
                 self._nodepts[elesix[ix], :ndim] = leles[ptoi, ix]
 
-            spinner()
-
         return lidx
 
-    def get_shape_points(self, lintol, spinner=NullProgressSpinner()):
+    def get_shape_points(self, lintol):
         spts = {}
 
         # Apply tolerance-based linearisation to the elements
-        lidx = self._linearise_eles(lintol, spinner)
+        lidx = self._linearise_eles(lintol)
 
         for etype, pent in self._elenodes:
             if pent != self._felespent:
@@ -296,7 +293,5 @@ class NodalMeshAssembler:
 
             spts[f'spt_{petype}_p0'] = arr
             spts[f'spt_{petype}_p0', 'linear'] = lidx[petype]
-
-            spinner()
 
         return spts

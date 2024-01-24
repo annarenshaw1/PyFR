@@ -43,6 +43,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g1.add(l, deps=deps(l, 'eles/disu'))
         kdeps = k['eles/copy_fpts'] or k['eles/disu']
         g1.add_all(k['iint/con_u'], deps=kdeps + k['mpiint/scal_fpts_pack'])
+        g1.add_all(k['pint/con_u'], deps=kdeps + k['mpiint/scal_fpts_pack'])
         g1.add_all(k['bcint/con_u'], deps=kdeps)
 
         # Run the shock sensor (if enabled)
@@ -77,36 +78,23 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['eles/gradcoru_upts_linear']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
 
-        # Compute the fused transformed flux and corrected gradient
-        for l in k['eles/tdisf_fused_curved'] + k['eles/tdisf_fused_linear']:
-            ldeps = deps(l, 'eles/tgradcoru_upts')
-            g2.add(l, deps=ldeps)
-
         # Interpolate these gradients to the flux points
         for l in k['eles/gradcoru_fpts']:
-            ldeps = deps(l,
-                         'eles/tdisf_fused_curved',
-                         'eles/tdisf_fused_linear',
-                         'eles/gradcoru_upts_curved',
+            ldeps = deps(l, 'eles/gradcoru_upts_curved',
                          'eles/gradcoru_upts_linear')
             g2.add(l, deps=ldeps)
 
-        # Set dependencies for interface flux interpolation
-        if k['eles/gradcoru_fpts']:
-            ideps = k['eles/gradcoru_fpts']
-        else:
-            ideps = (k['eles/gradcoru_upts_curved'] +
-                     k['eles/gradcoru_upts_linear'])
-
         # Pack and send these interpolated gradients to our neighbours
-        g2.add_all(k['mpiint/vect_fpts_pack'], deps=ideps)
+        g2.add_all(k['mpiint/vect_fpts_pack'], deps=k['eles/gradcoru_fpts'])
         for send, pack in zip(m['vect_fpts_send'], k['mpiint/vect_fpts_pack']):
             g2.add_mpi_req(send, deps=[pack])
 
         # Compute the common normal flux at our internal/boundary interfaces
         g2.add_all(k['iint/comm_flux'],
-                   deps=ideps + k['mpiint/vect_fpts_pack'])
-        g2.add_all(k['bcint/comm_flux'], deps=ideps)
+                   deps=k['eles/gradcoru_fpts'] + k['mpiint/vect_fpts_pack'])
+        g2.add_all(k['pint/comm_flux'],
+                   deps=k['eles/gradcoru_fpts'] + k['mpiint/vect_fpts_pack'])
+        g2.add_all(k['bcint/comm_flux'], deps=k['eles/gradcoru_fpts'])
 
         # Interpolate the gradients to the quadrature points
         for l in k['eles/gradcoru_qpts']:
@@ -121,23 +109,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['eles/tdisf_curved'] + k['eles/tdisf_linear']:
             if k['eles/qptsu']:
                 ldeps = deps(l, 'eles/gradcoru_qpts', 'eles/qptsu')
-            elif k['eles/gradcoru_fpts']:
-                ldeps = deps(l, 'eles/gradcoru_fpts')
             else:
-                ldeps = deps(l, 'eles/gradcoru_upts_curved',
-                             'eles/gradcoru_upts_linear')
+                ldeps = deps(l, 'eles/gradcoru_fpts')
             g2.add(l, deps=ldeps)
 
         # Compute the transformed divergence of the partially corrected flux
         for l in k['eles/tdivtpcorf']:
-            ldeps = deps(
-                l,
-                'eles/tdisf_curved',
-                'eles/tdisf_linear',
-                'eles/tdisf_fused_curved',
-                'eles/tdisf_fused_linear'
-            )
-            g2.add(l, deps=ldeps)
+            g2.add(l, deps=deps(l, 'eles/tdisf_curved', 'eles/tdisf_linear'))
         g2.commit()
 
         g3 = self.backend.graph()
@@ -183,6 +161,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g1.add(l, deps=deps(l, 'eles/disu'))
         kdeps = k['eles/copy_fpts'] or k['eles/disu']
         g1.add_all(k['iint/con_u'], deps=kdeps)
+        g1.add_all(k['pint/con_u'], deps=kdeps)
         g1.add_all(k['bcint/con_u'], deps=kdeps)
 
         # Compute the transformed gradient of the partially corrected solution
@@ -200,9 +179,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g2.add_all(k['eles/tgradcoru_upts'], deps=k['mpiint/con_u'])
 
         # Obtain the physical gradients at the solution points
-        for l in k['eles/gradcoru_u_curved']:
+        for l in k['eles/gradcoru_upts_curved']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
-        for l in k['eles/gradcoru_u_linear']:
+        for l in k['eles/gradcoru_upts_linear']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
         g2.commit()
 

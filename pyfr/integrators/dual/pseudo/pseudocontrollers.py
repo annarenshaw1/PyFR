@@ -25,9 +25,6 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             self._update_pseudostepinfo(i + 1, None)
             return False
 
-    def commit(self):
-        self.system.commit()
-
     def _resid(self, rcurr, rold, dt_fac):
         comm, rank, root = get_comm_rank_root()
 

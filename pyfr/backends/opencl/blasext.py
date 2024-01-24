@@ -9,8 +9,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = arr[0].traits[1:]
+        nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -20,7 +19,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
         kern.set_dims((ncolb, nrow))
         kern.set_args(nrow, ncolb, ldim, *arr)
 
@@ -51,8 +50,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         cl = self.backend.cl
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = rs[0].traits[1:]
+        nrow, ncol, ldim, dtype = rs[0].traits[1:]
         ncola, ncolb = rs[0].ioshape[1:]
 
         # Reduction workgroup dimensions
@@ -60,7 +58,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         gs = (ncolb - ncolb % -ls[0], ncola)
 
         # Empty result buffer on host with (nvars, ngroups)
-        reduced_host = np.empty((ncola, gs[0] // ls[0]), fpdtype)
+        reduced_host = np.empty((ncola, gs[0] // ls[0]), dtype)
 
         # Corresponding device memory allocation
         reduced_dev = cl.mem_alloc(reduced_host.nbytes)
@@ -77,11 +75,11 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Argument types for reduction kernel
         if method == 'errest':
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]*2
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]*2
         elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]
         else:
-            argt = [ixdtype]*3 + [np.uintp]*3 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*3 + [dtype]
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
@@ -92,7 +90,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         reducer = np.max if norm == 'uniform' else np.sum
 
         # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        facoff = argt.index(dtype)
 
         class ReductionKernel(OpenCLKernel):
             @property

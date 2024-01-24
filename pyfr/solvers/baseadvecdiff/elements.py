@@ -9,41 +9,39 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if 'flux' in self.antialias:
             bufs |= {'scal_qpts', 'vect_qpts'}
-        elif self.grad_fusion:
-            bufs |= {'grad_upts'}
 
-        if self.basis.fpts_in_upts:
-            bufs |= {'comm_fpts'}
-            bufs -= {'vect_fpts'}
+        if self._soln_in_src_exprs:
+            bufs |= {'scal_upts_cpy'}
 
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)
 
-        kernel, kernels = self._be.kernel, self.kernels
+        kernel = self._be.kernel
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
         slicem = self._slice_mat
 
         # Register our pointwise kernels
         self._be.pointwise.register(f'{kprefix}.gradcoru')
+        self._be.pointwise.register(f'{kprefix}.gradcorulin')
 
         # Mesh regions
         regions = self._mesh_regions
 
         if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
-            kernels['copy_fpts'] = lambda: kernel(
-                'copy', self._comm_fpts, self._scal_fpts
+            self.kernels['copy_fpts'] = lambda: kernel(
+                'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
             )
 
         if self.basis.order > 0:
-            kernels['tgradpcoru_upts'] = lambda uin: kernel(
+            self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
                 'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
-                out=self._grad_upts
+                out=self._vect_upts
             )
-        kernels['tgradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._comm_fpts,
-            out=self._grad_upts, beta=float(self.basis.order > 0)
+        self.kernels['tgradcoru_upts'] = lambda: kernel(
+            'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
+            out=self._vect_upts, beta=float(self.basis.order > 0)
         )
 
         # Template arguments for the physical gradient kernel
@@ -55,31 +53,25 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         }
 
         if 'curved' in regions:
-            kernels['gradcoru_u_curved'] = lambda: kernel(
-                'gradcoru', tplargs=tplargs | {'ktype': 'curved'},
+            self.kernels['gradcoru_upts_curved'] = lambda: kernel(
+                'gradcoru', tplargs=tplargs,
                 dims=[self.nupts, regions['curved']],
-                gradu=slicem(self._grad_upts, 'curved'),
+                gradu=slicem(self._vect_upts, 'curved'),
                 smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
             )
 
         if 'linear' in regions:
-            kernels['gradcoru_u_linear'] = lambda: kernel(
-                'gradcoru', tplargs=tplargs | {'ktype': 'linear'},
+            self.kernels['gradcoru_upts_linear'] = lambda: kernel(
+                'gradcorulin', tplargs=tplargs,
                 dims=[self.nupts, regions['linear']],
-                gradu=slicem(self._grad_upts, 'linear'),
+                gradu=slicem(self._vect_upts, 'linear'),
                 upts=self.upts, verts=self.ploc_at('linspts', 'linear')
             )
 
-        if not self.grad_fusion or self.basis.order == 0:
-            if 'linear' in regions:
-                kernels['gradcoru_upts_linear'] = kernels['gradcoru_u_linear']
-            if 'curved' in regions:
-                kernels['gradcoru_upts_curved'] = kernels['gradcoru_u_curved']
-
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts
-            vupts, vfpts = self._grad_upts, self._vect_fpts
+            vupts, vfpts = self._vect_upts, self._vect_fpts
 
             # Exploit the block-diagonal form of the operator
             muls = [kernel('mul', self.opmat('M0'),
@@ -89,8 +81,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        if not self.basis.fpts_in_upts:
-            kernels['gradcoru_fpts'] = gradcoru_fpts
+        self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias and self.basis.order > 0:
             def gradcoru_qpts():
@@ -98,14 +89,14 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 vupts, vqpts = self._vect_upts, self._vect_qpts
 
                 # Exploit the block-diagonal form of the operator
-                muls = [kernel('mul', self.opmat('M7'),
-                               vupts.slice(i*nupts, (i + 1)*nupts),
-                               vqpts.slice(i*nqpts, (i + 1)*nqpts))
+                muls = [self._be.kernel('mul', self.opmat('M7'),
+                                        vupts.slice(i*nupts, (i + 1)*nupts),
+                                        vqpts.slice(i*nqpts, (i + 1)*nqpts))
                         for i in range(self.ndims)]
 
                 return self._be.unordered_meta_kernel(muls)
 
-            kernels['gradcoru_qpts'] = gradcoru_qpts
+            self.kernels['gradcoru_qpts'] = gradcoru_qpts
 
         # Shock capturing
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
@@ -113,7 +104,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             tags = {'align'}
 
             # Register the kernels
-            self._be.pointwise.register(f'{kprefix}.shocksensor')
+            self._be.pointwise.register(
+                'pyfr.solvers.baseadvecdiff.kernels.shocksensor'
+            )
 
             # Obtain the scalar variable to be used for shock sensing
             shockvar = self.convarmap[self.ndims].index(self.shockvar)
@@ -142,7 +135,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                            extent=nonce + 'artvisc', tags=tags)
 
             # Apply the sensor to estimate the required artificial viscosity
-            kernels['shocksensor'] = lambda uin: kernel(
+            self.kernels['shocksensor'] = lambda uin: self._be.kernel(
                 'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
                 u=self.scal_upts[uin], artvisc=self.artvisc
             )

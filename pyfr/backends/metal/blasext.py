@@ -10,8 +10,7 @@ class MetalBlasExtKernels(MetalKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = arr[0].traits[1:]
+        nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -21,7 +20,7 @@ class MetalBlasExtKernels(MetalKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
         grid, tgrp = (ncolb, nrow, 1), (128, 1, 1)
         kargs = [nrow, ncolb, ldim] + [a.data for a in arr] + [1.0]*nv
 
@@ -54,8 +53,7 @@ class MetalBlasExtKernels(MetalKernelProvider):
         if any(r.traits != rs[0].traits for r in rs[1:]):
             raise ValueError('Incompatible matrix types')
 
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = rs[0].traits[1:]
+        nrow, ncol, ldim, dtype = rs[0].traits[1:]
         ncola, ncolb = rs[0].ioshape[1:]
         itemsize = rs[0].itemsize
 
@@ -70,7 +68,7 @@ class MetalBlasExtKernels(MetalKernelProvider):
         reduced_dev = call_(self.backend.dev, 'newBufferWith', length=bufsz,
                             options=MTLResourceStorageModeManaged)
         reduced_host = reduced_dev.contents().as_buffer(bufsz)
-        reduced_host = np.frombuffer(reduced_host, dtype=fpdtype)
+        reduced_host = np.frombuffer(reduced_host, dtype=dtype)
         reduced_host = reduced_host.reshape(ncola, -1)
 
         # Template arguments
@@ -86,17 +84,17 @@ class MetalBlasExtKernels(MetalKernelProvider):
 
         # Argument types for the reduction kernel
         if method == 'errest':
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]*2
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]*2
         elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]
         else:
-            argt = [ixdtype]*3 + [np.uintp]*3 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*3 + [dtype]
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
 
         # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        facoff = argt.index(dtype)
         nfacs = 2 if method == 'errest' else 1
 
         # Kernel arguments

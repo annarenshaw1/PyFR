@@ -2,8 +2,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 kernel void
-reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
-          device const ixdtype_t& ldim, device fpdtype_t* reduced,
+reduction(constant int& nrow, constant int& ncolb,
+          device const int& ldim, device fpdtype_t* reduced,
           device const fpdtype_t* rcurr, device const fpdtype_t* rold,
 % if method == 'errest':
           device const fpdtype_t* rerr,
@@ -20,17 +20,17 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
           uint2 blockIdx [[threadgroup_position_in_grid]])
 {
     int tid = threadIdx.x;
-    ixdtype_t i = ixdtype_t(blockIdx.x)*${blocksz} + tid;
-    ixdtype_t nblocks = (ncolb + ${blocksz} - 1) / ${blocksz};
+    int i = blockIdx.x*${blocksz} + tid;
+    int nblocks = (ncolb + ${blocksz} - 1) / ${blocksz};
 
     fpdtype_t r, acc = 0;
     threadgroup fpdtype_t sdata[${blocksz // 8 - 1}];
 
     if (i < ncolb)
     {
-        for (ixdtype_t j = 0; j < nrow; j++)
+        for (int j = 0; j < nrow; j++)
         {
-            ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, ${ncola});
+            int idx = j*ldim + SOA_IX(i, blockIdx.y, ${ncola});
         % if method == 'errest':
             r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
         % elif method == 'resid':
@@ -70,6 +70,6 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
         }
 
         // Copy to global memory
-        reduced[ixdtype_t(blockIdx.y)*nblocks + blockIdx.x] = acc;
+        reduced[blockIdx.y*nblocks + blockIdx.x] = acc;
     }
 }

@@ -10,8 +10,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = arr[0].traits[1:]
+        nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -21,7 +20,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -60,12 +59,11 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         cuda = self.backend.cuda
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = rs[0].traits[1:]
+        nrow, ncol, ldim, dtype = rs[0].traits[1:]
         ncola, ncolb = rs[0].ioshape[1:]
 
         # Reduction block dimensions
-        block = (256, 1, 1)
+        block = (128, 1, 1)
 
         # Determine the grid size
         grid = get_grid_for_block(block, ncolb, ncola)
@@ -74,9 +72,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         reduced_dev = cuda.mem_alloc(ncola*grid[0]*rs[0].itemsize)
 
         # Empty result buffer on the host
-        reduced_host = cuda.pagelocked_empty((ncola, grid[0]), fpdtype)
+        reduced_host = cuda.pagelocked_empty((ncola, grid[0]), dtype)
 
-        tplargs = dict(norm=norm, method=method)
+        tplargs = dict(norm=norm, sharesz=block[0], method=method)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
@@ -88,11 +86,11 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Argument types for reduction kernel
         if method == 'errest':
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]*2
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]*2
         elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]
         else:
-            argt = [ixdtype]*3 + [np.uintp]*3 + [fpdtype]
+            argt = [np.int32]*3 + [np.intp]*3 + [dtype]
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
@@ -102,7 +100,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         params.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
 
         # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        facoff = argt.index(dtype)
 
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum

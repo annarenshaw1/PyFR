@@ -25,7 +25,6 @@ class BaseSystem:
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
-        self.nregs = nregs
 
         # Obtain a nonce to uniquely identify this system
         nonce = str(next(self._nonce_seq))
@@ -46,7 +45,8 @@ class BaseSystem:
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
-        self.eles_vect_upts = [e._grad_upts for e in eles]
+        if hasattr(eles[0], '_vect_upts'):
+            self.eles_vect_upts = [e._vect_upts for e in eles]
 
         if hasattr(eles[0], 'entmin_int'):
             self.eles_entmin_int = [e.entmin_int for e in eles]
@@ -56,26 +56,20 @@ class BaseSystem:
         self.nvars = eles[0].nvars
 
         # Load the interfaces
-        self._int_inters = self._load_int_inters(rallocs, mesh, elemap)
-        self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
-        self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
+        int_inters = self._load_int_inters(rallocs, mesh, elemap)
+        mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
+        bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
+        pint_inters = self._load_periodic_inters(rallocs, mesh, elemap)
         backend.commit()
 
-    def commit(self):
         # Prepare the kernels and any associated MPI requests
-        self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
-                          self._mpi_inters, self._bc_inters)
-        self._gen_mpireqs(self._mpi_inters)
-        self.backend.commit()
-
-        self.has_src_macros = any(eles.has_src_macros
-                                  for eles in self.ele_map.values())
-
-        # Delete the memory-intensive ele_map
-        del self.ele_map
+        self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters, pint_inters)
+        self._gen_mpireqs(mpi_inters)
+        backend.commit()
 
         # Save the BC interfaces, but delete the memory-intensive elemap
-        for b in self._bc_inters:
+        self._bc_inters = bc_inters
+        for b in bc_inters:
             del b.elemap
 
         # Observed input/output bank numbers
@@ -129,8 +123,17 @@ class BaseSystem:
     def _load_int_inters(self, rallocs, mesh, elemap):
         key = f'con_p{rallocs.prank}'
 
-        lhs, rhs = mesh[key].tolist()
-        int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
+        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+
+        # Strip periodic BC indices
+        pidxs = []
+        for k, v in mesh.attrs(key).items():
+            if 'periodic' in k:
+                pidxs += list(v)
+        new_lhs = [v for i, v in enumerate(lhs) if i not in pidxs]
+        new_rhs = [v for i, v in enumerate(rhs) if i not in pidxs]
+
+        int_inters = self.intinterscls(self.backend, new_lhs, new_rhs, elemap,
                                        self.cfg)
 
         return [int_inters]
@@ -142,7 +145,7 @@ class BaseSystem:
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
-            interarr = interarr.tolist()
+            interarr = interarr.astype('U4,i4,i1,i2').tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
                                          rallocs, elemap, self.cfg)
@@ -161,7 +164,7 @@ class BaseSystem:
                 cfgsect = f'soln-bcs-{m[1]}'
 
                 # Get the interface
-                interarr = mesh[f].tolist()
+                interarr = mesh[f].astype('U4,i4,i1,i2').tolist()
 
                 # Instantiate
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
@@ -171,7 +174,28 @@ class BaseSystem:
 
         return bc_inters
 
-    def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
+    def _load_periodic_inters(self, rallocs, mesh, elemap):
+        key = f'con_p{rallocs.prank}'
+
+        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+  
+        # Get periodic BC indices
+        pidxs = []
+        for k, v in mesh.attrs(key).items():
+            if 'periodic' in k:
+                pidxs += list(v)
+        if pidxs:
+            new_lhs = [v for i, v in enumerate(lhs) if i in pidxs]
+            new_rhs = [v for i, v in enumerate(rhs) if i in pidxs]
+
+            pint_inters = self.pintinterscls(self.backend, new_lhs, new_rhs, elemap,
+                                        self.cfg)
+
+            return [pint_inters]
+        else:
+            return []
+
+    def _gen_kernels(self, nregs, eles, iint, mpiint, bcint, pint):
         self._kernels = kernels = defaultdict(list)
 
         # Helper function to tag the element type/MPI interface
@@ -184,8 +208,8 @@ class BaseSystem:
             elif pname == 'mpiint':
                 self._ktags[kern] = f'i-{prov.name}'
 
-        provnames = ['eles', 'iint', 'mpiint', 'bcint']
-        provlists = [eles, iint, mpiint, bcint]
+        provnames = ['eles', 'iint', 'mpiint', 'bcint', 'pint']
+        provlists = [eles, iint, mpiint, bcint, pint]
 
         for pn, provs in zip(provnames, provlists):
             for p in provs:
@@ -272,9 +296,7 @@ class BaseSystem:
     def _preproc_graphs(self, uinbank):
         pass
 
-    def preproc(self, t, uinbank):
-        self._prepare_kernels(t, uinbank, None)
-
+    def preproc(self, uinbank):
         for graph in self._preproc_graphs(uinbank):
             self.backend.run_graph(graph)
 
@@ -311,11 +333,6 @@ class BaseSystem:
 
     def filt(self, uinoutbank):
         kkey = ('eles/modal_filter', uinoutbank, None)
-
-        self.backend.run_kernels(self._kernels[kkey])
-
-    def evalsrcmacros(self, uinoutbank):
-        kkey = ('eles/evalsrcmacros', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
 

@@ -158,12 +158,11 @@ def kernel(context, name, ndim, **kwargs):
     # Capture the kernel body
     body = capture(context, context['caller'].body)
 
-    # Get the generator class and data types
-    kerngen = context['_kernel_generator']
-    fpdtype, ixdtype = context['fpdtype'], context['ixdtype']
+    # Get the generator class and floating point data type
+    kerngen, fpdtype = context['_kernel_generator'], context['fpdtype']
 
     # Instantiate
-    kern = kerngen(name, int(ndim), kwargs, body, fpdtype, ixdtype)
+    kern = kerngen(name, int(ndim), kwargs, body, fpdtype)
 
     # Save the argument/type list for later use
     context['_kernel_argspecs'][name] = kern.argspec()

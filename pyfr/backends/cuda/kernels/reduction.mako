@@ -2,8 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __global__ void
-reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
-          fpdtype_t *__restrict__ reduced,
+reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
           fpdtype_t *__restrict__ rcurr, fpdtype_t *__restrict__ rold,
 % if method == 'errest':
           fpdtype_t *__restrict__ rerr, fpdtype_t atol, fpdtype_t rtol)
@@ -14,16 +13,17 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
 % endif
 {
     int tid = threadIdx.x;
-    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + tid;
+    int i = blockIdx.x*blockDim.x + tid;
+    int lastblksize = ncolb % ${sharesz};
 
-    __shared__ fpdtype_t sdata[32];
+    __shared__ fpdtype_t sdata[${sharesz}];
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
     {
-        for (ixdtype_t j = 0; j < nrow; j++)
+        for (int j = 0; j < nrow; j++)
         {
-            ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
+            int idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
         % if method == 'errest':
             r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
         % elif method == 'resid':
@@ -36,35 +36,45 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
             acc += r*r;
         % endif
         }
+
+        sdata[tid] = acc;
     }
-
-    // Reduce within each warp
-    for (int off = warpSize / 2; off > 0; off >>= 1)
-% if norm == 'uniform':
-        acc = max(__shfl_down_sync(0xFFFFFFFFU, acc, off), acc);
-% else:
-        acc += __shfl_down_sync(0xFFFFFFFFU, acc, off);
-% endif
-
-    // Have the first thread in each warp write out to shared memory
-    if (tid % warpSize == 0)
-        sdata[tid / warpSize] = acc;
 
     __syncthreads();
 
-    // Have the first warp perform the final reduction
-    if (tid / warpSize == 0)
+    // Unrolled reduction within full blocks
+    if (blockIdx.x != gridDim.x - 1)
     {
-        acc = (tid < blockDim.x / warpSize) ? sdata[tid] : 0;
-
-        for (int off = warpSize / 2; off > 0; off >>= 1)
-    % if norm == 'uniform':
-            acc = max(__shfl_down_sync(0xFFFFFFFFU, acc, off), acc);
-    % else:
-            acc += __shfl_down_sync(0xFFFFFFFFU, acc, off);
-    % endif
-
-        if (tid == 0)
-            reduced[ixdtype_t(blockIdx.y)*gridDim.x + blockIdx.x] = acc;
+    % for n in pyfr.ilog2range(sharesz):
+        if (tid < ${n})
+        {
+        % if norm == 'uniform':
+            sdata[tid] = max(sdata[tid], sdata[tid + ${n}]);
+        % else:
+            sdata[tid] += sdata[tid + ${n}];
+        % endif
+        }
+        __syncthreads();
+    % endfor
     }
+    // Last block reduced with a variable sized loop
+    else
+    {
+        for (int s = 1; s < lastblksize; s *= 2)
+        {
+            if (tid % (2*s) == 0 && tid + s < lastblksize)
+            {
+            % if norm == 'uniform':
+                sdata[tid] = max(sdata[tid], sdata[tid + s]);
+            % else:
+                sdata[tid] += sdata[tid + s];
+            % endif
+            }
+            __syncthreads();
+        }
+    }
+
+    // Copy to global memory
+    if (tid == 0)
+        reduced[blockIdx.y*gridDim.x + blockIdx.x] = sdata[0];
 }

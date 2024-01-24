@@ -7,13 +7,12 @@ import sys
 class LibWrapper:
     _libname = None
     _statuses = None
-    _status_noerr = 0
     _functions = None
     _errtype = ctypes.c_int
     _mode = ctypes.DEFAULT_MODE
 
     def __init__(self):
-        self._lib = lib = self._load_library()
+        self._lib = lib = load_library(self._libname, self._mode)
 
         for fret, fname, *fargs in self._functions:
             fn = getattr(lib, fname)
@@ -25,14 +24,11 @@ class LibWrapper:
 
             setattr(self, self._transname(fname), fn)
 
-    def _load_library(self):
-        return load_library(self._libname, self._mode)
-
     def _transname(self, fname):
         return fname
 
     def _errcheck(self, status, fn, args):
-        if status != self._status_noerr:
+        if status != 0:
             try:
                 raise self._statuses[status]
             except KeyError:
@@ -67,18 +63,6 @@ def load_library(name, mode=ctypes.DEFAULT_MODE):
 
     # …and if this fails then defer to the system search path
     return ctypes.CDLL(lname, mode=mode)
-
-
-def make_array(vals, type=None):
-    vals = list(vals)
-    if not vals:
-        return None
-
-    type = type or vals[0].__class__
-    arr = (type*len(vals))()
-    arr[:] = vals
-
-    return arr
 
 
 def platform_libname(name):

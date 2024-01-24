@@ -73,7 +73,7 @@ class OpenMPCompiler:
         cmd = [
             self.cc,                # Compiler name
             '-shared',              # Create a shared library
-            '-std=c11',             # Enable C11 support
+            '-std=c99',             # Enable C99 support
             '-Ofast',               # Optimise, incl. -ffast-math
             '-march=native',        # Use CPU-specific instructions
             '-fopenmp',             # Enable OpenMP support
@@ -135,10 +135,9 @@ class OpenMPCompilerModule:
     def __init__(self, mod):
         self.mod = mod
 
-    def function(self, name, restype=None, argtypes=None):
+    def function(self, name, restype, argtypes):
         fn = getattr(self.mod, name)
         fn.restype = restype
-        if argtypes:
-            fn.argtypes = argtypes
+        fn.argtypes = argtypes
 
         return fn

@@ -9,8 +9,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ixdtype = self.backend.ixdtype
-        nblocks, nrow, *_, fpdtype = arr[0].traits
+        nblocks, nrow, *_, dtype = arr[0].traits
         ncola = arr[0].ioshape[-2]
 
         # Render the kernel template
@@ -20,21 +19,18 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype] + [np.uintp]*nv + [fpdtype]*nv)
+                                  [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
         # Set the static arguments
-        kern.set_nblocks(nblocks)
-        kern.set_args(nrow, *arr)
+        kern.set_args(nrow, nblocks, *arr)
 
         class AxnpbyKernel(OpenMPKernel):
             def bind(self, *consts):
-                self.kernel.set_args(*consts, start=1 + nv)
+                self.kernel.set_args(*consts, start=2 + nv)
 
         return AxnpbyKernel(mats=arr, kernel=kern)
 
     def copy(self, dst, src):
-        ixdtype = self.backend.ixdtype
-
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
@@ -46,9 +42,8 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         nblocks = src.nblocks
 
         # Build the kernel
-        kern = self._build_kernel('par_memcpy', ksrc,
-                                  [np.uintp]*2 + [ixdtype]*4)
-        kern.set_args(dst, src, dbbytes, sbbytes, bnbytes, nblocks)
+        kern = self._build_kernel('par_memcpy', ksrc, 'PiPiii')
+        kern.set_args(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
         return OpenMPKernel(mats=[dst, src], kernel=kern)
 
@@ -56,8 +51,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if any(r.traits != rs[0].traits for r in rs[1:]):
             raise ValueError('Incompatible matrix types')
 
-        ixdtype = self.backend.ixdtype
-        nblocks, nrow, *_, fpdtype = rs[0].traits
+        nblocks, nrow, *_, dtype = rs[0].traits
         ncola = rs[0].ioshape[-2]
 
         tplargs = dict(norm=norm, ncola=ncola, method=method)
@@ -69,24 +63,24 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('reduction').render(**tplargs)
 
         # Array for the reduced data
-        reduced = np.zeros(ncola, dtype=fpdtype)
+        reduced = np.zeros(ncola, dtype=dtype)
 
         regs = list(rs) + [dt_mat] if dt_mat else rs
 
         # Argument types for reduction kernel
         if method == 'errest':
-            argt = [ixdtype]*2 + [np.uintp]*4 + [fpdtype]*2
+            argt = [np.int32]*2 + [np.intp]*4 + [dtype]*2
         elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*2 + [np.uintp]*4 + [fpdtype]
+            argt = [np.int32]*2 + [np.intp]*4 + [dtype]
         else:
-            argt = [ixdtype]*2 + [np.uintp]*3 + [fpdtype]
+            argt = [np.int32]*2 + [np.intp]*3 + [dtype]
 
         # Build
         rkern = self._build_kernel('reduction', src, argt)
         rkern.set_args(nrow, nblocks, reduced.ctypes.data, *regs)
 
         # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        facoff = argt.index(dtype)
 
         class ReductionKernel(OpenMPKernel):
             @property

@@ -1,13 +1,12 @@
 import numpy as np
 
-from pyfr.plugins.base import BaseSolnPlugin
+from pyfr.plugins.base import BasePlugin
 
 
-class NaNCheckPlugin(BaseSolnPlugin):
+class NaNCheckPlugin(BasePlugin):
     name = 'nancheck'
     systems = ['*']
     formulations = ['dual', 'std']
-    dimensions = [2, 3]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

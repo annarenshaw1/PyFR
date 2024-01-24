@@ -3,14 +3,13 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
-class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
+class FluidForcePlugin(BasePlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
-    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -85,22 +84,14 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             norms = defaultdict(list)
             rfpts = defaultdict(list)
 
-            for etype, eidx, fidx, flags in mesh[bc].tolist():
+            for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i2'):
                 eles = elemap[etype]
-                itype, proj, norm = eles.basis.faces[fidx]
-
-                ppts, pwts = self._surf_quad(itype, proj, flags='s')
-                nppts = len(ppts)
-
-                # Get phyical normals
-                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
-
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(pnorm)
 
                 if (etype, fidx) not in m0:
-                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                    qwts[etype, fidx] = pwts
+                    facefpts = eles.basis.facefpts[fidx]
+
+                    m0[etype, fidx] = eles.basis.m0[facefpts]
+                    qwts[etype, fidx] = eles.basis.fpts_wts[facefpts]
 
                 if self._viscous and etype not in m4:
                     m4[etype] = eles.basis.m4
@@ -114,11 +105,17 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                     # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
+                # Phyiscal normals
+                pnorms = eles.get_pnorms(eidx, fidx)
+
+                eidxs[etype, fidx].append(eidx)
+                norms[etype, fidx].append(pnorms)
+
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
                 if self._mcomp:
-                    ploc = eles.ploc_at_np(ppts)[..., eidx]
-                    rfpt = ploc - morigin
+                    fpts_idx = eles.basis.facefpts[fidx]
+                    rfpt = eles.plocfpts[fpts_idx, eidx] - morigin
                     rfpts[etype, fidx].append(rfpt)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}

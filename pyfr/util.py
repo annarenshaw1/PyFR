@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft
 import hashlib
@@ -95,23 +96,28 @@ class silence:
         os.close(self.saved_fds[1])
 
 
-def merge_intervals(ivals, tol=1e-5):
-    ivals = sorted(ivals, reverse=True)
-    mivals = [ivals.pop()]
+@contextmanager
+def setenv(**kwargs):
+    _env = os.environ.copy()
+    os.environ.update(kwargs)
 
-    while ivals:
-        lstart, lend = mivals[-1]
-        cstart, cend = ivals.pop()
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(_env)
 
-        if cstart < lend:
-            raise ValueError('Overlapping range')
 
-        if abs(cstart - lend) < tol:
-            mivals[-1] = (lstart, cend)
-        else:
-            mivals.append((cstart, cend))
+@contextmanager
+def chdir(dirname):
+    cdir = os.getcwd()
 
-    return mivals
+    try:
+        if dirname:
+            os.chdir(dirname)
+        yield
+    finally:
+        os.chdir(cdir)
 
 
 def subclasses(cls, just_leaf=False):

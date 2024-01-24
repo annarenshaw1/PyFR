@@ -1,13 +1,11 @@
 from collections import Counter, defaultdict, namedtuple
 import itertools as it
 import re
-from uuid import UUID
+import uuid
 
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.progress import NullProgressSequence
-from pyfr.util import digest
 
 
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
@@ -53,7 +51,7 @@ class BasePartitioner:
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
-            con = con.copy()
+            con = con.copy().astype('U4,i4,i1,i2')
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -87,8 +85,11 @@ class BasePartitioner:
                 name, l = bc[1], int(bc[2])
                 bccon[name].append(offset_con(mesh[f], l))
 
+        # Output data type
+        dtype = 'U4,i4,i1,i2'
+
         # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon)}
+        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
 
         for en in spts:
             newmesh[f'spt_{en}_p0'] = np.hstack(spts[en])
@@ -98,7 +99,7 @@ class BasePartitioner:
             newmesh['con_p0', k] = np.hstack(v)
 
         for k, v in bccon.items():
-            newmesh[f'bcon_{k}_p0'] = np.hstack(v)
+            newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
 
         return newmesh, rnum
 
@@ -231,8 +232,7 @@ class BasePartitioner:
                 bndeti |= {l, r}
 
         # Start by assigning the lowest numbers to these boundary elements
-        nvetimap = sorted(bndeti)
-        nvparts = [vpartmap[eti] for eti in nvetimap]
+        nvetimap, nvparts = list(bndeti), [vpartmap[eti] for eti in bndeti]
 
         # Use sub-partitioning to assign interior element numbers
         for part, scon in enumerate(pscon):
@@ -342,7 +342,7 @@ class BasePartitioner:
                     bcon_px[m[1], lpart].append(conl)
 
         # Output data type
-        dtype = 'S4,i8,i1,i2'
+        dtype = 'S4,i4,i1,i2'
 
         # Output
         con = {}
@@ -362,62 +362,51 @@ class BasePartitioner:
 
         return con, eleglmap
 
-    def partition(self, mesh, progress=NullProgressSequence):
+    def partition(self, mesh):
         # Extract the current UUID from the mesh
         curruuid = mesh['mesh_uuid']
 
         # Combine any pre-existing partitions
-        with progress.start('Combine mesh parts'):
-            mesh, rnum = self._combine_mesh_parts(mesh)
+        mesh, rnum = self._combine_mesh_parts(mesh)
 
         # Obtain the element weighting table
         elewts = self._get_elewts(mesh)
 
         # Merge periodic elements
-        with progress.start('Group periodic elements'):
-            con, exwts, pmerge, pnames = self._group_periodic_eles(mesh,
-                                                                   elewts)
+        con, exwts, pmerge, pnames = self._group_periodic_eles(mesh, elewts)
 
         # Obtain the dual graph for this mesh
-        with progress.start('Construct graph'):
-            graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
+        graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
 
         # Partition the graph
-        with progress.start('Partition graph'):
-            if self.nparts > 1:
-                vparts = self._partition_graph(graph, self.partwts).tolist()
+        if self.nparts > 1:
+            vparts = self._partition_graph(graph, self.partwts).tolist()
 
-                if (n := len(set(vparts))) != self.nparts:
-                    raise RuntimeError(f'Partitioner error: mesh has {n} '
-                                       f'parts versus goal of {self.nparts}')
-            else:
-                vparts = [0]*len(vetimap)
+            if (n := len(set(vparts))) != self.nparts:
+                raise RuntimeError(f'Partitioner error: mesh has {n} parts '
+                                   f'versus goal of {self.nparts}')
+        else:
+            vparts = [0]*len(vetimap)
 
         # Unmerge periodic elements
-        with progress.start('Ungroup periodic elements'):
-            vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap,
-                                                          vparts)
+        vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap, vparts)
 
         # Renumber vertices
-        with progress.start('Renumber vertices'):
-            vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+        vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
 
-        # Repartition the mesh
-        with progress.start('Repartition mesh'):
-            # Partition the connectivity portion of the mesh
-            newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts,
-                                                    pnames)
+        # Partition the connectivity portion of the mesh
+        newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts, pnames)
 
-            # Handle the shape points
-            newmesh |= self._partition_spts(mesh, vetimap, vparts)
+        # Handle the shape points
+        newmesh |= self._partition_spts(mesh, vetimap, vparts)
 
-            # Update the renumbering table
-            for etype, emap in rnum.items():
-                for k, (pidx, eidx) in emap.items():
-                    emap[k] = eleglmap[etype, eidx]
+        # Update the renumbering table
+        for etype, emap in rnum.items():
+            for k, (pidx, eidx) in emap.items():
+                emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
-        newmesh['mesh_uuid'] = newuuid = str(UUID(digest(curruuid, rnum)[:32]))
+        newmesh['mesh_uuid'] = newuuid = str(uuid.uuid4())
 
         # Build the solution converter
         def partition_soln(soln):

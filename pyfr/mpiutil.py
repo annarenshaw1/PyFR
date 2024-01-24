@@ -3,21 +3,9 @@ import os
 import sys
 
 
-def init_mpi():
+def register_finalize_handler():
     import mpi4py.rc
     from mpi4py import MPI
-
-    # Prefork to allow us to exec processes after MPI is initialised
-    if hasattr(os, 'fork'):
-        from pytools.prefork import enable_prefork
-
-        enable_prefork()
-
-    # Work around issues with UCX-derived MPI libraries
-    os.environ['UCX_MEMTYPE_CACHE'] = 'n'
-
-    # Manually initialise MPI
-    MPI.Init()
 
     # Prevent mpi4py from calling MPI_Finalize
     mpi4py.rc.finalize = False

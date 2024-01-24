@@ -4,7 +4,6 @@ import re
 
 import numpy as np
 
-from pyfr.progress import NullProgressBar
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclass_where
 from pyfr.writers import BaseWriter
@@ -499,7 +498,7 @@ class VTKWriter(BaseWriter):
         shape = self._get_shape(name, nspts)
         return shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
 
-    def write_out(self, progress=NullProgressBar()):
+    def write_out(self):
         name, extn = os.path.splitext(self.outf)
         parallel = extn == '.pvtu'
 
@@ -512,7 +511,7 @@ class VTKWriter(BaseWriter):
 
         write_s_to_fh = lambda s: fh.write(s.encode())
 
-        for pfn, misil in progress.start_with_iter(parts.items()):
+        for pfn, misil in parts.items():
             with open(pfn, 'wb') as fh:
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '

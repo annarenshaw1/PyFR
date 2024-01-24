@@ -1,14 +1,13 @@
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
+class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     name = 'writer'
     systems = ['*']
     formulations = ['dual', 'std']
-    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -58,7 +57,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             metadata = None
 
         # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.plugins:
+        for csh in intg.completed_step_handlers:
             try:
                 prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
                 pdata = csh.serialise(intg)

@@ -1,4 +1,4 @@
-from collections import defaultdict, deque
+from collections import deque
 import itertools as it
 import re
 import sys
@@ -47,13 +47,14 @@ class BaseIntegrator:
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
 
-        self._invalidate_caches()
+        # Solution cache
+        self._curr_soln = None
+
+        # Solution gradients cache
+        self._curr_grad_soln = None
 
         # Record the starting wall clock time
         self._wstart = time.time()
-
-        # Record the total amount of time spent in each plugin
-        self._plugin_wtimes = defaultdict(lambda: 0)
 
         # Abort computation
         self.abort = False
@@ -62,16 +63,8 @@ class BaseIntegrator:
         plugins = []
 
         for s in self.cfg.sections():
-            if (m := re.match('(soln|solver)-plugin-(.+?)(?:-(.+))?$', s)):
-                cfgsect, ptype, name, suffix = m[0], m[1], m[2], m[3]
-
-                if ptype == 'solver' and suffix:
-                    raise ValueError(f'solver-plugin-{name} cannot have a '
-                                     'suffix')
-
-                args = (ptype, name, self, cfgsect)
-                if ptype == 'soln':
-                    args += (suffix, )
+            if (m := re.match('soln-plugin-(.+?)(?:-(.+))?$', s)):
+                cfgsect, name, suffix = m[0], m[1], m[2]
 
                 data = {}
                 if initsoln is not None:
@@ -82,25 +75,9 @@ class BaseIntegrator:
                             data[f.split('/')[2]] = initsoln[f]
 
                 # Instantiate
-                plugins.append(get_plugin(*args, **data))
+                plugins.append(get_plugin(name, self, cfgsect, suffix, **data))
 
         return plugins
-
-    def _run_plugins(self):
-        self.backend.wait()
-
-        # Fire off the plugins and tally up the runtime
-        for plugin in self.plugins:
-            tstart = time.time()
-
-            plugin(self)
-
-            pname = getattr(plugin, 'name', 'other')
-            psuffix = getattr(plugin, 'suffix', None)
-            self._plugin_wtimes[pname, psuffix] += time.time() - tstart
-
-        # Abort if plugins request it
-        self._check_abort()
 
     @staticmethod
     def get_plugin_data_prefix(name, suffix):
@@ -124,11 +101,6 @@ class BaseIntegrator:
         for t in it.chain(ta, tb):
             if not tlist or t - tlist[-1] > self.dtmin:
                 tlist.append(t)
-
-    def _invalidate_caches(self):
-        self._curr_soln = None
-        self._curr_grad_soln = None
-        self._curr_dt_soln = None
 
     def step(self, t, dt):
         pass
@@ -154,14 +126,6 @@ class BaseIntegrator:
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
         stats.set('solver-time-integrator', 'wall-time', wtime)
-
-        # Plugin wall clock times
-        for (pname, psuffix), t in self._plugin_wtimes.items():
-            k = f'plugin-wall-time-{pname}'
-            if psuffix:
-                k += f'-{psuffix}'
-
-            stats.set('solver-time-integrator', k, t)
 
         # Step counts
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)

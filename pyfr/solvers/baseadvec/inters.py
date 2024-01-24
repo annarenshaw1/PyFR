@@ -29,12 +29,15 @@ class BaseAdvectionIntInters(BaseInters):
 
         # Generate the constant matrices
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
+        self._pnorm_rhs = self._const_mat(rhs, 'get_pnorms_for_inter')
+
+        # Make velocity offset available inside kernels
+        self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
 
     def _gen_perm(self, lhs, rhs):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
         self._perm = self._get_perm_for_view(lhs, 'get_scal_fpts_for_inter')
-
 
 class BaseAdvectionMPIInters(BaseInters):
     # Starting tag used for MPI
@@ -56,6 +59,9 @@ class BaseAdvectionMPIInters(BaseInters):
         self._scal_rhs = be.xchg_matrix_for_view(self._scal_lhs)
 
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
+
+        # Make velocity offset available inside kernels
+        self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
 
         # Kernels
         self.kernels['scal_fpts_pack'] = lambda: be.kernel(
@@ -117,6 +123,9 @@ class BaseAdvectionBCInters(BaseInters):
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')
 
+        # Make velocity offset available inside kernels
+        self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
+
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
         else:
@@ -150,11 +159,9 @@ class BaseAdvectionBCInters(BaseInters):
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
-        if (any('ploc' in ex for ex in exprs.values()) and
-            'ploc' not in self._external_args):
-            spec = f'in fpdtype_t[{self.ndims}]'
-            value = self._const_mat(lhs, 'get_ploc_for_inter')
+        spec = f'in fpdtype_t[{self.ndims}]'
+        value = self._const_mat(lhs, 'get_ploc_for_inter')
 
-            self._set_external('ploc', spec, value=value)
+        self._set_external('ploc', spec, value=value)
 
         return exprs
