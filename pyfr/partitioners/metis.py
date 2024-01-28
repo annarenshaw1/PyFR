@@ -1,9 +1,9 @@
-from ctypes import (POINTER, byref, c_double, c_int32, c_int64, c_float,
+from ctypes import (POINTER, byref, c_double, c_int, c_int32, c_int64, c_float,
                     c_void_p)
 
 import numpy as np
 
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 from pyfr.partitioners.base import BasePartitioner
 from pyfr.util import silence
 
@@ -14,13 +14,18 @@ class METISErrorInput(METISError): pass
 class METISErrorMemory(METISError): pass
 
 
-class METISWrappers:
-    # Possible return codes
+class METISWrappers(LibWrapper):
+    _libname = 'metis'
+
+    # Error codes
     _statuses = {
         -2: METISErrorInput,
         -3: METISErrorMemory,
-        -4: METISError
+        '*': METISError
     }
+
+    # Success status code
+    _status_noerr = 1
 
     # Constants
     METIS_NOPTIONS = 40
@@ -28,46 +33,17 @@ class METISWrappers:
     METIS_OPTION_CTYPE = 2
     METIS_OPTION_IPTYPE = 3
     METIS_OPTION_RTYPE = 4
-    METIS_OPTION_NITER = 6
-    METIS_OPTION_NCUTS = 7
-    METIS_OPTION_SEED = 8
-    METIS_OPTION_MINCONN = 10
-    METIS_OPTION_NSEPS = 15
-    METIS_OPTION_UFACTOR = 16
+    METIS_OPTION_NIPARTS = 6
+    METIS_OPTION_NITER = 7
+    METIS_OPTION_NCUTS = 8
+    METIS_OPTION_SEED = 9
+    METIS_OPTION_MINCONN = 11
+    METIS_OPTION_NSEPS = 16
+    METIS_OPTION_UFACTOR = 17
 
-    def __init__(self):
-        lib = load_library('metis')
+    def _load_library(self):
+        lib = super()._load_library()
 
-        # Try to determine the data types METIS was compiled with
-        with silence():
-            self._probe_types(lib)
-
-        # METIS_SetDefaultOptions
-        self.METIS_SetDefaultOptions = lib.METIS_SetDefaultOptions
-        self.METIS_SetDefaultOptions.argtypes = [c_void_p]
-        self.METIS_SetDefaultOptions.errcheck = self._errcheck
-
-        # METIS_PartGraphKway
-        self.METIS_PartGraphKway = lib.METIS_PartGraphKway
-        self.METIS_PartGraphKway.argtypes = [
-            POINTER(self.metis_int), POINTER(self.metis_int),
-            c_void_p, c_void_p, c_void_p, c_void_p, c_void_p,
-            POINTER(self.metis_int), c_void_p, c_void_p, c_void_p,
-            POINTER(self.metis_int), c_void_p
-        ]
-        self.METIS_PartGraphKway.errcheck = self._errcheck
-
-        # METIS_PartGraphRecursive
-        self.METIS_PartGraphRecursive = lib.METIS_PartGraphRecursive
-        self.METIS_PartGraphRecursive.argtypes = [
-            POINTER(self.metis_int), POINTER(self.metis_int),
-            c_void_p, c_void_p, c_void_p, c_void_p, c_void_p,
-            POINTER(self.metis_int), c_void_p, c_void_p, c_void_p,
-            POINTER(self.metis_int), c_void_p
-        ]
-        self.METIS_PartGraphRecursive.errcheck = self._errcheck
-
-    def _probe_types(self, lib):
         # Attempt to determine the integer type used by METIS
         opts = np.arange(0, self.METIS_NOPTIONS, dtype=np.int64)
         lib.METIS_SetDefaultOptions(opts.ctypes)
@@ -89,11 +65,12 @@ class METISWrappers:
         pwts = np.array([0.5, 0.5], dtype=np.float64)
         prts = np.empty(len(vtab) - 1, dtype=metis_int_np)
 
-        ret = lib.METIS_PartGraphKway(
-            intref(len(vtab) - 1), intref(1), vtab.ctypes, etab.ctypes, None,
-            None, None, intref(len(pwts)), pwts.ctypes, None, None, intref(),
-            prts.ctypes
-        )
+        with silence():
+            ret = lib.METIS_PartGraphKway(
+                intref(len(vtab) - 1), intref(1), vtab.ctypes, etab.ctypes,
+                None, None, None, intref(len(pwts)), pwts.ctypes, None, None,
+                intref(), prts.ctypes
+            )
 
         # If successful then assume METIS is using 64-bit doubles
         if ret == 1:
@@ -105,12 +82,21 @@ class METISWrappers:
         else:
             raise METISError
 
-    def _errcheck(self, status, fn, args):
-        if status != 1:
-            try:
-                raise self._statuses[status]
-            except KeyError:
-                raise METISError
+        return lib
+
+    @property
+    def _functions(self):
+        return [
+            (c_int, 'METIS_SetDefaultOptions', c_void_p),
+            (c_int, 'METIS_PartGraphKway', POINTER(self.metis_int),
+             POINTER(self.metis_int), c_void_p, c_void_p, c_void_p, c_void_p,
+             c_void_p, POINTER(self.metis_int), c_void_p, c_void_p, c_void_p,
+             POINTER(self.metis_int), c_void_p),
+            (c_int, 'METIS_PartGraphRecursive', POINTER(self.metis_int),
+             POINTER(self.metis_int), c_void_p, c_void_p, c_void_p, c_void_p,
+             c_void_p, POINTER(self.metis_int), c_void_p, c_void_p, c_void_p,
+             POINTER(self.metis_int), c_void_p)
+        ]
 
 
 class METISPartitioner(BasePartitioner):
@@ -118,19 +104,19 @@ class METISPartitioner(BasePartitioner):
     has_multiple_constraints = True
 
     # Integer options
-    int_opts = {'niter', 'ncuts', 'seed', 'nseps', 'ufactor'}
+    int_opts = {'niter', 'niparts', 'ncuts', 'seed', 'nseps', 'ufactor'}
 
     # Enumeration options
     enum_opts = {
         'ptype': {'rb': 0, 'kway': 1},
         'ctype': {'rm': 0, 'shem': 1},
-        'iptype': {'grow': 0, 'random': 1, 'edge': 2, 'node': 3},
+        'iptype': {'grow': 0, 'random': 1, 'edge': 2, 'node': 3, 'metisrb': 4},
         'rtype': {'fm': 0, 'greedy': 1, 'sep2sided': 3, 'sep1sided': 4},
         'minconn': {'false': 0, 'true': 1}
     }
 
     # Default options
-    dflt_opts = {'ufactor': 10, 'ptype': 'rb', 'minconn': 'true'}
+    dflt_opts = {'seed': 2079, 'ufactor': 10, 'ptype': 'rb', 'minconn': 'true'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
