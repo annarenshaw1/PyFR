@@ -82,7 +82,7 @@ class YPlusPlugin(BasePlugin):
 
             for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i2'):
                 eles = elemap[etype]
-                
+
                 # Phyiscal normals
                 pnorms = eles.get_pnorms(eidx, fidx)
                 pnnorms = pnorms/np.linalg.norm(pnorms, axis=1)[:, np.newaxis]
@@ -162,7 +162,7 @@ class YPlusPlugin(BasePlugin):
             # Get the quadrature weights and normal vectors
             qwts = self._qwts[etype, fidx]
             norms = self._norms[etype, fidx]
-            
+
             # Get operator and J^-T matrix
             m4 = self._m4[etype]
             rcpjact = self._rcpjact[etype, fidx]
@@ -208,12 +208,12 @@ class YPlusPlugin(BasePlugin):
             if y_plus[minidx] < yp_min:
                 yp_min = y_plus[minidx]
                 ploc_yp_min = self._ploc_fpts[etype, fidx][:, minidx]
-                
+
             maxidx = np.argmax(y_plus)
             if y_plus[maxidx] > yp_max:
                 yp_max = y_plus[maxidx]
                 ploc_yp_max = self._ploc_fpts[etype, fidx][:, maxidx]
-        
+
         # Reduce
         if rank != root:
             comm.reduce((yp_min, ploc_yp_min), op=mpi.MIN, root=root)
