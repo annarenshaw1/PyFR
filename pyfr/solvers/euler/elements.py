@@ -31,12 +31,12 @@ class BaseFluidElements:
         # Compute the energy
         gamma = cfg.getfloat('constants', 'gamma')
         E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
-
+        
         omg = cfg.getfloat('constants', 'omg')
         rote = 0.5*rho*omg*omg*(coords[0,...]**2 + coords[1,...]**2)
         E -= rote
-
-        return [rho] + rhovs + [E]
+        
+        return [rho, *rhovs, E]
 
     @staticmethod
     def con_to_pri(cons, cfg):
@@ -49,19 +49,38 @@ class BaseFluidElements:
         gamma = cfg.getfloat('constants', 'gamma')
         p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
 
-        return [rho] + vs + [p]
+        return [rho, *vs, p]
+
+    @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        rho, *rhouvw = cons[:-1]
+        diff_rho, *diff_rhouvw, diff_E = diff_cons
+
+        # Divide momentum components by ρ
+        uvw = [rhov / rho for rhov in rhouvw]
+
+        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
+        diff_uvw = [(diff_rhov - v*diff_rho) / rho
+                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
+
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) - ρu⃗·∂u⃗)]
+        gamma = cfg.getfloat('constants', 'gamma')
+        diff_p = diff_E - 0.5*(np.einsum('ijk,ijk->jk', uvw,  diff_rhouvw) +
+                               np.einsum('ijk,ijk->jk', rhouvw, diff_uvw))
+        diff_p *= gamma - 1
+
+        return [diff_rho, *diff_uvw, diff_p]
 
     @staticmethod
     def validate_formulation(ctrl):
         shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
-        if ctrl.formulation == 'dual' and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with '
-                             'dual time stepping.')
-
-        ctrlvardt = ctrl.controller_has_variable_dt
-        if ctrlvardt and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with '
-                             'adaptive time stepping.')
+        if shock_capturing == 'entropy-filter':
+            if ctrl.formulation == 'dual':
+                raise ValueError('Entropy filtering not compatible with '
+                                 'dual time stepping.')
+            elif ctrl.controller_has_variable_dt:
+                raise ValueError('Entropy filtering not compatible with '
+                                 'adaptive time stepping.')
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
@@ -90,6 +109,11 @@ class BaseFluidElements:
                 'c': self.cfg.items_as('constants', float),
                 'order': self.basis.order
             }
+
+            # Check to see if running anti-aliasing
+            if self.antialias:
+                raise ValueError('Entropy filter not compatible with '
+                                 'anti-aliasing.')
 
             # Check to see if running collocated solution/flux points
             m0 = self.basis.m0
@@ -147,7 +171,6 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
 
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.euler.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.tfluxlin')
 
         # Template parameters for the flux kernels
         tplargs = {
@@ -164,28 +187,26 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
 
         if c in r and 'flux' not in self.antialias:
             self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
-                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
-                smats=self.curved_smat_at('upts'), vb=self.vb_at('upts', c)
+                'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
+                f=s(self._vect_upts, c), smats=self.curved_smat_at('upts'), vb=self.vb_at('upts', c)
             )
         elif c in r:
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
-                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
-                smats=self.curved_smat_at('qpts'), vb=self.vb_at('qpts', c)
+                'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                dims=[self.nqpts, r[c]], u=s(self._scal_qpts, c),
+                f=s(self._vect_qpts, c), smats=self.curved_smat_at('qpts'), vb=self.vb_at('qpts', c)
             )
 
         if l in r and 'flux' not in self.antialias:
             self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
-                verts=self.ploc_at('linspts', l), upts=self.upts,
-                vb=self.vb_at('upts', l)
+                'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
+                f=s(self._vect_upts, l), verts=self.ploc_at('linspts', l), upts=self.upts, vb=self.vb_at('upts', l)
             )
         elif l in r:
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
-                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
-                verts=self.ploc_at('linspts', l), upts=self.qpts,
-                vb=self.vb_at('qpts', l)
+                'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
+                f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l), upts=self.qpts, vb=self.vb_at('qpts', l)
             )

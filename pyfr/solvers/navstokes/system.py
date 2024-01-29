@@ -11,6 +11,6 @@ class NavierStokesSystem(BaseAdvectionDiffusionSystem):
 
     elementscls = NavierStokesElements
     intinterscls = NavierStokesIntInters
-    pintinterscls = NavierStokesPintInters
     mpiinterscls = NavierStokesMPIInters
+    pintinterscls = NavierStokesPintInters
     bbcinterscls = NavierStokesBaseBCInters

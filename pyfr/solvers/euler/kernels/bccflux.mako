@@ -13,11 +13,11 @@
 
     // Compute the RHS
     fpdtype_t ur[${nvars}];
-    ${pyfr.expand('bc_rsolve_state', 'ul', 'norm_nl', 'ur')};
+    ${pyfr.expand('bc_rsolve_state', 'ul', 'norm_nl', 'ur','vb')};
 
     // Perform the Riemann solve
     fpdtype_t fn[${nvars}];
-    ${pyfr.expand('rsolve', 'ul', 'ur', 'norm_nl', 'fn', 'vb')};
+    ${pyfr.expand('rsolve', 'ul', 'ur', 'norm_nl', 'fn')};
 
     // Scale and write out the common normal fluxes
 % for i in range(nvars):
