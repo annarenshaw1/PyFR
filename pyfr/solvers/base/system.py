@@ -59,12 +59,12 @@ class BaseSystem:
         self._int_inters = self._load_int_inters(rallocs, mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
         self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
-        self.pint_inters = self._load_periodic_inters(rallocs, mesh, elemap)
+        self._pint_inters = self._load_periodic_inters(rallocs, mesh, elemap)
         backend.commit()
 
     def commit(self):
         # Prepare the kernels and any associated MPI requests
-        self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,self._mpi_inters, self._bc_inters, self.pint_inters)
+        self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,self._mpi_inters, self._bc_inters, self._pint_inters)
         self._gen_mpireqs(self._mpi_inters)
         self.backend.commit()
 
@@ -139,8 +139,7 @@ class BaseSystem:
         new_lhs = [v for i, v in enumerate(lhs) if i not in pidxs]
         new_rhs = [v for i, v in enumerate(rhs) if i not in pidxs]
 
-        int_inters = self.intinterscls(self.backend, new_lhs, new_rhs, elemap,
-                                              self.cfg)
+        int_inters = self.intinterscls(self.backend, new_lhs, new_rhs, elemap, self.cfg)
 
         return [int_inters]
 
@@ -215,7 +214,7 @@ class BaseSystem:
                 self._ktags[kern] = f'i-{prov.name}'
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint','pint']
-        provlists = [eles, iint, mpiint, bcint,pint]
+        provlists = [eles, iint, mpiint, bcint, pint]
 
         for pn, provs in zip(provnames, provlists):
             for p in provs:

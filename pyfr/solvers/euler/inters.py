@@ -54,7 +54,7 @@ class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-             ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
             vb=self._vb_lhs
         )
 
@@ -66,11 +66,11 @@ class EulerPintInters(FluidIntIntersMixin, BaseAdvectionIntInters):
         self._be.pointwise.register('pyfr.solvers.euler.kernels.pintcflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
+        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self.c)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'pintcflux', tplargs=tplargs, dims=[self.ninterfpts],
+            'pintcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
             nr=self._pnorm_rhs, vb=self._vb_lhs
         )
