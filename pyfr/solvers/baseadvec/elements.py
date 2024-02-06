@@ -14,8 +14,8 @@ class BaseAdvectionElements(BaseElements):
         self._srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'src_macros': [],
-            'c': self.cfg.items_as('constants', float)
+            'c': self.cfg.items_as('constants', float),
+            'src_macros': []
         }
 
         self._ploc_in_src_macros = False
