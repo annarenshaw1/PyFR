@@ -32,7 +32,9 @@ class BaseFluidElements:
         gamma = cfg.getfloat('constants', 'gamma')
         E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
         
-        omg = cfg.getfloat('constants', 'omg')
+        omg_mag = cfg.getfloat('constants', 'omg_mag')
+        w_freq = cfg.getfloat('constants', 'w_freq')
+        omg = omg_mag*w_freq*cos(w_frew*t)
         rote = 0.5*rho*omg*omg*(coords[0,...]**2 + coords[1,...]**2)
         E -= rote
         
