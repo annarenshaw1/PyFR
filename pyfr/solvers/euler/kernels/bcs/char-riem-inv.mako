@@ -4,7 +4,7 @@
 <% gamma = c['gamma'] %>
 <% omg_mag = cfg.getfloat('constants', 'omg_mag') %>
 <% w_freq = cfg.getfloat('constants', 'w_freq') %>
-<% omg = omg_mag*w_freq*cos(w_frew*t) %>
+<% omg = omg_mag*w_freq*cos(w_freq*t) %>
 
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
     fpdtype_t cs = sqrt(${gamma}*${c['p']}/${c['rho']});

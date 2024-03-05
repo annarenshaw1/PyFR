@@ -1,5 +1,9 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<% omg_mag = cfg.getfloat('constants', 'omg_mag') %>
+<% w_freq = cfg.getfloat('constants', 'w_freq') %>
+<% omg = omg_mag*w_freq*cos(w_freq*t) %>
+
 <%pyfr:macro name='inviscid_flux' params='s, f, p, v, vb'>
     fpdtype_t invrho = 1.0/s[0], E = s[${nvars - 1}];
 
@@ -11,7 +15,7 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t rote = 0.5*s[0]*(vb[0]*vb[0] + vb[1]*vb[1]);
+    fpdtype_t rote = 0.5*s[0]*omg*omg*(vb[0]*vb[0] + vb[1]*vb[1]);
     p = ${c['gamma'] - 1}*(E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)} + rote);
 
     // Density and energy fluxes
@@ -35,7 +39,7 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t rote = 0.5*s[0]*(vb[0]*vb[0] + vb[1]*vb[1]);
+    fpdtype_t rote = 0.5*s[0]*omg*omg*(vb[0]*vb[0] + vb[1]*vb[1]);
     p = ${c['gamma'] - 1}*(E - 0.5*invrho*${pyfr.dot('s[{i}]', i=(1, ndims + 1))} + rote);
 
     // Density and energy fluxes

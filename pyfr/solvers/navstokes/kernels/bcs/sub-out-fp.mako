@@ -1,15 +1,17 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.navstokes.kernels.bcs.common'/>
 
-<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
 
-<% omg_mag = cfg.getfloat('constants', 'omg_mag') %>
-<% w_freq = cfg.getfloat('constants', 'w_freq') %>
-<% omg = omg_mag*w_freq*cos(w_frew*t) %>
+
+<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
 
 % for i in range(nvars - 1):
     ur[${i}] = ul[${i}];
 % endfor
+    omg_mag = cfg.getfloat('constants', 'omg_mag') %>
+    w_freq = cfg.getfloat('constants', 'w_freq') %>
+    omg = omg_mag*w_freq*cos(w_freq*t) %>
+    
     ur[${nvars - 1}] = ${c['p']}/${c['gamma'] - 1}
                      + 0.5*(1.0/ul[0])*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))} - ${0.5*omg**2}*ul[0]*(ploc[0]*ploc[0] + ploc[1]*ploc[1]);
 </%pyfr:macro>
