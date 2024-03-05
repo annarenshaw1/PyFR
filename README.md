@@ -43,3 +43,5 @@ See the AUTHORS file.
 PyFR is released under the New BSD License (see the LICENSE file for details).
 Documentation is made available under a Creative Commons Attribution 4.0
 license (see <http://creativecommons.org/licenses/by/4.0/>).
+
+test
