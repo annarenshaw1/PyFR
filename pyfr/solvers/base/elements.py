@@ -133,11 +133,10 @@ class BaseElements:
         ploc = self.plocfpts
         x = ploc[..., 0]
         y = ploc[..., 1]
-        omg = self.cfg.getfloat('constants', 'omg')
 
         vb = np.zeros_like(ploc[..., :2])
-        vb[..., 0] = -y*omg
-        vb[..., 1] =  x*omg
+        vb[..., 0] = -y
+        vb[..., 1] =  x
 
         return vb
 
@@ -328,11 +327,10 @@ class BaseElements:
         ploc = self.ploc_at_np(name)
         x = ploc[:, 0, :]
         y = ploc[:, 1, :]
-        omg = self.cfg.getfloat('constants', 'omg')
 
         vb = np.zeros_like(ploc[:, :2, :])
-        vb[:, 0, :] = -y*omg
-        vb[:, 1, :] =  x*omg
+        vb[:, 0, :] = -y
+        vb[:, 1, :] =  x
 
         return vb
 
