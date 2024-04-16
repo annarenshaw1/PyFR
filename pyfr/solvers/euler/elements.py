@@ -2,7 +2,6 @@ import numpy as np
 import math
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
-from pyfr.plugins.ctime import CTime
 
 class BaseFluidElements:
     privarmap = {2: ['rho', 'u', 'v', 'p'],

@@ -132,6 +132,9 @@ class BaseElements:
         ploc = self.plocfpts
         x = ploc[..., 0]
         y = ploc[..., 1]
+        
+        omg_mag = self.cfg.getfloat('constants', 'omg_mag')
+        w_freq = self.cfg.getfloat('constants', 'w_freq')
 
         vb = np.zeros_like(ploc[..., :2])
         vb[..., 0] = -y
@@ -327,6 +330,9 @@ class BaseElements:
         x = ploc[:, 0, :]
         y = ploc[:, 1, :]
 
+        omg_mag = self.cfg.getfloat('constants', 'omg_mag')
+        w_freq = self.cfg.getfloat('constants', 'w_freq')
+        
         vb = np.zeros_like(ploc[:, :2, :])
         vb[:, 0, :] = -y
         vb[:, 1, :] =  x
