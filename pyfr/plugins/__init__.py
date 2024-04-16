@@ -14,6 +14,7 @@ from pyfr.plugins.tavg import TavgCLIPlugin, TavgPlugin
 from pyfr.plugins.turbulence import TurbulencePlugin
 from pyfr.plugins.yplus import YPlusPlugin
 from pyfr.plugins.writer import WriterPlugin
+from pyfr.plugins.ctime import CTime
 from pyfr.util import subclass_where
 
 

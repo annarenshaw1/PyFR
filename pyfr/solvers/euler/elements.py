@@ -1,7 +1,8 @@
 import numpy as np
+import math
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
-
+from pyfr.plugins.ctime import CTime
 
 class BaseFluidElements:
     privarmap = {2: ['rho', 'u', 'v', 'p'],
@@ -34,7 +35,7 @@ class BaseFluidElements:
         
         omg_mag = cfg.getfloat('constants', 'omg_mag')
         w_freq = cfg.getfloat('constants', 'w_freq')
-        omg = omg_mag*w_freq*cos(w_frew*t)
+        omg = omg_mag*w_freq*math.cos(w_freq*0)
         rote = 0.5*rho*omg*omg*(coords[0,...]**2 + coords[1,...]**2)
         E -= rote
         
@@ -182,7 +183,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             'c': self.cfg.items_as('constants', float),
             'jac_exprs': self.basis.jac_exprs
         }
-
+        
         # Helpers
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat

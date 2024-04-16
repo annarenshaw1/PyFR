@@ -5,7 +5,6 @@ import numpy as np
 from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import memoize
 
-
 def inters_map(meth):
     @wraps(meth)
     def newmeth(self, eidx, fidx):
@@ -98,7 +97,7 @@ class BaseElements:
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
-
+        
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg, coords=coords)):
             self.scal_upts[:, i, :] = v
@@ -321,7 +320,7 @@ class BaseElements:
     @memoize
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
-
+    
     @memoize
     def vb_at_np(self, name):
         ploc = self.ploc_at_np(name)
