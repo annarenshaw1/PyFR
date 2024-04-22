@@ -4,7 +4,7 @@
 <% gamma = c['gamma'] %>
 
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
-    fpdtype_t omg = c['omg_mag']*c['w_freq']*cos(c['w_freq']*t)
+    fpdtype_t omg = 1.0*1.0*cos(1.0*t);
     fpdtype_t cs = sqrt(${gamma}*${c['p']}/${c['rho']});
     fpdtype_t s = ${c['p']}*pow(${c['rho']}, -${gamma});
     fpdtype_t ratio = cs*${2.0/gmo};
@@ -17,7 +17,7 @@
                                       for i in range(ndims))});
     fpdtype_t p_i = ${gmo}*ul[${nvars - 1}]
                     - ${0.5*gmo}*inv*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))} 
-                  + ${0.5*gmo*omg**2}*ul[0]*r2;
+                  + ${0.5*gmo}*omg*omg*ul[0]*r2;
     fpdtype_t c_i = sqrt(${gamma}*p_i*inv);
     fpdtype_t R_e = (fabs(V_e) >= cs && V_i >= 0)
                   ? V_i - c_i*${2.0/gmo}
@@ -40,5 +40,5 @@
 % endfor
     ur[${nvars - 1}] = p_b*${1.0/gmo}
                      + 0.5*(1.0/ur[0])*${pyfr.dot('ur[{i}]', i=(1, ndims + 1))} 
-                     - ${0.5*omg**2}*ur[0]*r2;
+                     - ${0.5}*omg*omg*ur[0]*r2;
 </%pyfr:macro>

@@ -1,6 +1,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='inviscid_flux' params='s, f, p, v, vb'>
+<%pyfr:macro name='inviscid_flux' params='s, f, p, v, vb' externs='t'>
     fpdtype_t invrho = 1.0/s[0], E = s[${nvars - 1}];
 
     // Compute the velocities
@@ -11,7 +11,7 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t omg = c['omg_mag']*c['w_freq']*cos(c['w_freq']*t)
+    fpdtype_t omg = 1.0*1.0*cos(1.0*t);
     fpdtype_t rote = 0.5*s[0]*omg*omg*(vb[0]*vb[0] + vb[1]*vb[1]);
     p = ${c['gamma'] - 1}*(E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)} + rote);
 
@@ -27,7 +27,7 @@
 % endfor
 </%pyfr:macro>
 
-<%pyfr:macro name='inviscid_flux_1d' params='s, f, p, v, vb'>
+<%pyfr:macro name='inviscid_flux_1d' params='s, f, p, v, vb' externs='t'>
     fpdtype_t invrho = 1.0/s[0], E = s[${nvars - 1}];
 
     // Compute the velocities
@@ -36,7 +36,7 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t omg = c['omg_mag']*c['w_freq']*cos(c['w_freq']*t)
+    fpdtype_t omg = 1.0*1.0*cos(1.0);
     fpdtype_t rote = 0.5*s[0]*omg*omg*(vb[0]*vb[0] + vb[1]*vb[1]);
     p = ${c['gamma'] - 1}*(E - 0.5*invrho*${pyfr.dot('s[{i}]', i=(1, ndims + 1))} + rote);
 
