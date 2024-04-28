@@ -36,6 +36,12 @@ class BaseElements:
         # Kernels we provide
         self.kernels = {}
 
+        # Global kernel arguments
+        self._external_args = {}
+        self._external_vals = {}
+
+        self._set_external('t', 'scalar fpdtype_t')
+
         # Check the dimensionality of the problem
         if ndims != basiscls.ndims or ndims not in self.privarmap:
             raise ValueError('Invalid element matrix dimensions')
@@ -190,6 +196,11 @@ class BaseElements:
         else:
             raise ValueError('Invalid slice region')
             
+    def _set_external(self, name, spec, value=None):
+         self._external_args[name] = spec
+
+         if value is not None:
+             self._external_vals[name] = value        
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend

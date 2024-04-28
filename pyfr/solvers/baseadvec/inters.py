@@ -34,9 +34,6 @@ class BaseAdvectionIntInters(BaseInters):
         # Make velocity offset available inside kernels
         self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
 
-        # Make the simulation time available inside kernels
-        self._set_external('t', 'fpdtype_t')
-
     def _gen_perm(self, lhs, rhs):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
@@ -66,7 +63,6 @@ class BaseAdvectionMPIInters(BaseInters):
         
         # Make velocity offset available inside kernels
         self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
-
         # Kernels
         self.kernels['scal_fpts_pack'] = lambda: be.kernel(
             'pack', self._scal_lhs
@@ -124,12 +120,8 @@ class BaseAdvectionBCInters(BaseInters):
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
-        # Make the simulation time available inside kernels
-        self._set_external('t', 'scalar fpdtype_t')
-        
         # Make velocity offset available inside kernels
         self._vb_lhs = self._const_mat(lhs, 'get_vb_for_inter')
-
         
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
