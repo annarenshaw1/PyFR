@@ -54,8 +54,8 @@ class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts], 
-            extrns=self._external_args,
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, ul=self._scal_lhs, 
+            ur=self._scal_rhs, nl=self._pnorm_lhs,
             vb=self._vb_lhs
         )
 
@@ -72,8 +72,7 @@ class EulerPintInters(FluidIntIntersMixin, BaseAdvectionIntInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'pintcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args,
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
             nr=self._pnorm_rhs, vb=self._vb_lhs
         )
 

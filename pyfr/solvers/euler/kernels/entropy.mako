@@ -6,7 +6,7 @@
     fpdtype_t E = u[${nvars - 1}];
 
     // Compute the pressure
-    fpdtype_t omg = 1.0*1.0*cosf(1.0*t);
+    fpdtype_t omg = ${c['omg_mag']}*${c['w_freq']}*cos(${c['w_freq']}*t);
     fpdtype_t rote = 0.5*d*omg*omg*(vb[0]*vb[0] + vb[1]*vb[1]);
     p = ${c['gamma'] - 1}*(E - 0.5*rcpd*(${pyfr.dot('u[{i}]', i=(1, ndims + 1))}));
 

@@ -37,12 +37,12 @@ class NavierStokesIntInters(TplargsMixin,
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
-            'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'intconu', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args,
             ulin=self._scal_lhs, urin=self._scal_rhs,
             ulout=self._comm_lhs, urout=self._comm_rhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args,
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
@@ -60,13 +60,13 @@ class NavierStokesPintInters(TplargsMixin,
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.pintcflux')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
-            'pintconu', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'pintconu', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args, 
             ulin=self._scal_lhs, urin=self._scal_rhs,
             ulout=self._vect_lhs, urout=self._vect_rhs,
             nl=self._pnorm_lhs, nr=self._pnorm_rhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'pintcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'pintcflux', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args,
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
@@ -84,11 +84,11 @@ class NavierStokesMPIInters(TplargsMixin,
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
-            'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args,
             ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._comm_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+            'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts], extrns=self._external_args,
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,

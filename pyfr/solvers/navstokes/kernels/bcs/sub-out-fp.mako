@@ -5,7 +5,7 @@
 % for i in range(nvars - 1):
     ur[${i}] = ul[${i}];
 % endfor
-    fpdtype_t omg = 1.0*1.0*cos(1.0*t);
+    fpdtype_t omg = ${c['omg_mag']}*${c['w_freq']}*cos(${c['w_freq']}*t);
     ur[${nvars - 1}] = ${c['p']}/${c['gamma'] - 1}
                      + 0.5*(1.0/ul[0])*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))} - ${0.5}*omg*omg*ul[0]*(ploc[0]*ploc[0] + ploc[1]*ploc[1]);
 </%pyfr:macro>
